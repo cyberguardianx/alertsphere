@@ -1,0 +1,42 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: docker build -t alertsphere:test .
+
+      - name: Run health check
+        run: |
+          docker run -d \
+            --name alertsphere-test \
+            -p 3000:3000 \
+            -e NODE_ENV=production \
+            -e GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }} \
+            -e GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} \
+            -e APP_URL=http://localhost:3000 \
+            alertsphere:test
+
+          echo "Waiting for server to start..."
+          sleep 10
+
+          curl --fail http://localhost:3000 || exit 1
+          echo "Health check passed!"
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f alertsphere-test || true
